@@ -54,7 +54,7 @@ void readSeatingChart(const char* filename,
         col = 0;
         break;
       default:
-        printf("omg wat: %d, %d, %c\n", row, col, c);
+        printf("omg wat: '%c'\n", c);
         exit(-1);
     }
   }
@@ -74,7 +74,7 @@ char seat_at(seating_t* seating, int row, int col) {
   return seating->state[row * seating->cols + col];
 }
 
-int neighbors(seating_t* seating, int row, int col) {
+int immediate_neighbors(seating_t* seating, int row, int col) {
   int k = 0;
   int others[8][2] = {
     { row - 1, col - 1 },
@@ -102,6 +102,54 @@ int neighbors(seating_t* seating, int row, int col) {
   return k;
 }
 
+int line_of_sight_neighbors(seating_t* seating, int row, int col) {
+  int k = 0;
+  int vectors[8][2] = {
+    { -1, -1 },
+    { -1,  0 },
+    { -1,  1 },
+    {  0, -1 },
+    {  0,  1 },
+    {  1, -1 },
+    {  1,  0 },
+    {  1,  1 }
+  };
+
+  int* vector;
+  for (int i = 0; i < 8; ++i) {
+    vector = vectors[i];
+    int drow = vector[0];
+    int dcol = vector[1];
+    int r = row;
+    int c = col;
+
+    bool found = false;
+    while(r + drow >= 0 && r + drow < seating->rows &&
+          c + dcol >= 0 && c + dcol < seating->cols &&
+          !found) {
+      r += drow;
+      c += dcol;
+
+      switch(seating->state[r * seating->cols + c]) {
+        case '#':
+          k++;
+          found = true;
+          break;
+        case 'L':
+          found = true;
+          break;
+        case '.':
+          break;
+        default:
+          printf("argh!\n");
+          exit(-1);
+      }
+    }
+  }
+
+  return k;
+}
+
 
 /**
  * - If a seat is empty (L) and there are no occupied seats adjacent to it, the
@@ -114,16 +162,18 @@ int neighbors(seating_t* seating, int row, int col) {
  *
  * Return true if position is same as last position.
  */
-bool tick(seating_t *seating) {
+bool tick(seating_t *seating,
+          int (*neighbors_strategy)(seating_t*, int, int),
+          int too_crowded) {
   for (int i = 0; i < seating->rows; ++i) {
     for (int j = 0; j < seating->cols; ++j) {
       int pos = i * seating->cols + j;
       switch(seating->state[pos]) {
         case 'L':
-          seating->next_state[pos] = (neighbors(seating, i, j) == 0) ? '#' : 'L';
+          seating->next_state[pos] = (neighbors_strategy(seating, i, j) == 0) ? '#' : 'L';
           break;
         case '#':
-          if (neighbors(seating, i, j) >= 4) {
+          if (neighbors_strategy(seating, i, j) >= too_crowded) {
             // Becomes vacated.
             seating->next_state[pos] = 'L';
           } else {
@@ -178,20 +228,42 @@ void test_tick() {
   readSeatingChart("day11_test_data.txt", seating, 10, 10);
 
   int i = 0;
-  while(!tick(seating)) ++i;
+  while(!tick(seating, &immediate_neighbors, 4)) ++i;
 
   printf("%d iterations\n", i);
 
   assert(occupied_seats(seating) == 37);
 }
 
-
 void part1() {
   seating_t* seating = malloc(sizeof(seating_t));
-  readSeatingChart("day11_data.txt", seating, 97, 92);
+  readSeatingChart("day11_data.txt", seating, 97, 91);
 
   int i = 0;
-  while(!tick(seating)) ++i ;
+  while(!tick(seating, &immediate_neighbors, 4)) ++i ;
+
+  printf("%d iterations\n", i);
+  printf("%d occupied seats\n", occupied_seats(seating));
+}
+
+void test_line_of_sight() {
+  seating_t* seating = malloc(sizeof(seating_t));
+  readSeatingChart("day11_test_data.txt", seating, 10, 10);
+
+  int i = 0;
+  while(!tick(seating, &line_of_sight_neighbors, 5)) ++i;
+
+  printf("%d iterations\n", i);
+
+  assert(occupied_seats(seating) == 26);
+}
+
+void part2() {
+  seating_t* seating = malloc(sizeof(seating_t));
+  readSeatingChart("day11_data.txt", seating, 97, 91);
+
+  int i = 0;
+  while(!tick(seating, &line_of_sight_neighbors, 5)) ++i ;
 
   printf("%d iterations\n", i);
   printf("%d occupied seats\n", occupied_seats(seating));
@@ -202,6 +274,10 @@ int main (int argc, char** argv) {
   test_tick();
 
   part1();
+
+  test_line_of_sight();
+
+  part2();
 }
 
 
